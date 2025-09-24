@@ -1,8 +1,6 @@
-# 🌿 Plant Disease Detection
+# 🌿 Plant Disease Detection – Streamlit Edition
 
-Welcome! This is a pet project that combines **deep learning** and **web development** to detect plant diseases from leaf images.
-
-A **Flask-powered API** hosts a PyTorch model, and a **React frontend** lets you upload a photo of a leaf and instantly see a prediction.
+This project started as a **Flask API + React frontend** and is now simplified into a single **Streamlit app** that bundles the model inference and (optionally) AI‑generated disease treatment information. The legacy Flask + React stack is still in the repo but you only need `streamlit_app.py` for a live deployment.
 
 ---
 
@@ -38,7 +36,7 @@ Displays the predicted disease name and confidence after clicking “Submit.”
 
 ---
 
-## 🔨 How to Run Locally
+## 🔨 How to Run Locally (Streamlit Mode)
 
 ### 1. ✨ Clone the Repository
 
@@ -47,97 +45,95 @@ git clone https://github.com/SayanRoy001/Plant-Disease-Detection.git
 cd Plant-Disease-Detection
 ```
 
-### 2. 💻 Backend Setup (Flask + PyTorch)
-
-```bash
-cd backend
-```
-
-#### a. Create a Virtual Environment
-
-**PowerShell (Windows)**
+### 1. Create & Activate Virtual Environment
 
 ```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
-#### b. Install Dependencies
+### 2. Install Dependencies
 
-```bash
+```powershell
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-#### c. Start Flask Server
+### 3. Place Model Weights
 
-```bash
-python main.py
-```
+Ensure your trained model file is at `backend/plant_disease_model.pth`.
 
-Output:
+If you cannot commit it (size > 100MB), set an environment variable or Streamlit secret:
 
 ```
-* Running on http://127.0.0.1:5000/
+MODEL_URL=https://direct-download-link/plant_disease_model.pth
 ```
 
-### 3. 🔎 Frontend Setup (React)
+### 4. (Optional) Gemini API Key
 
-```bash
-cd ../frontend
+Add `GENAI_API_KEY` to a local `.env` (not committed) or Streamlit secrets to enable AI disease info generation.
+
+### 5. Run Streamlit
+
+```powershell
+streamlit run streamlit_app.py
 ```
 
-#### a. Install Node.js & npm
+Browse: http://localhost:8501
 
-If not installed, download from [https://nodejs.org](https://nodejs.org)
-
-#### b. Check Installation
-
-```bash
-node --version
-npm --version
-```
-
-#### c. Install React Dependencies
-
-```bash
-npm install
-```
-
-#### d. Start React Dev Server
-
-```bash
-npm start
-```
-
-This opens: [http://localhost:3000](http://localhost:3000)
+### 6. (Legacy Mode – Flask + React)
+If you want the old architecture, see the previous revision of this README or the `backend/` and `frontend/` folders.
 
 ---
 
-## 🧪 Testing the App
+## 🚀 Deploying a Live Streamlit App (Persistent Link)
 
-1. Go to **[http://localhost:3000/](http://localhost:3000/)**
-2. You'll see the **"Predict the Disease"** interface.
-3. Upload a diseased plant leaf image.
-4. Click **Submit**.
-5. See the predicted disease name and confidence score.
+You can host this app on **Streamlit Community Cloud** for a free always-on (lightly sleeping) link:
 
-Example:
+1. Push this repository to GitHub (public).
+2. Go to https://share.streamlit.io
+3. Click "Deploy an app".
+4. Select the repo + branch `main` + main file: `streamlit_app.py`.
+5. (Secrets) Add in the UI under Settings → Secrets:
+  ```
+  GENAI_API_KEY = "your_real_key"
+  # Only if not committing weights:
+  # MODEL_URL = "https://direct-download-link/plant_disease_model.pth"
+  ```
+6. Deploy – first run may take longer (model download / install).
 
+### Custom Domain (Optional)
+Use a redirect or a small HTML page elsewhere linking to the Streamlit URL.
+
+### Alternatives
+| Platform | Notes |
+|----------|-------|
+| Streamlit Cloud | Easiest. Paste secrets. |
+| Render (Web Service) | Use `streamlit run streamlit_app.py` start command. Add persistent disk if downloading model each boot. |
+| Hugging Face Spaces | Use `docker` or `streamlit` space; good for ML demos. |
+
+## 🔐 Secrets & Environment
+
+Local development: create `.env` (NOT committed):
 ```
-Disease: Apple Early Blight
-Confidence: 0.97
+GENAI_API_KEY=your_key_here
 ```
+
+Streamlit Cloud: use **Secrets** UI (or copy `.streamlit/secrets.example.toml` → `secrets.toml` locally for testing).
+
+In production the app auto-detects:
+* `GENAI_API_KEY` – enables Gemini disease info
+* `MODEL_URL` – optional model auto-download if weights not committed
 
 ---
 
 ## 🎓 Technologies Used
 
-* React.js (Frontend)
-* Flask (Backend)
-* PyTorch (Model Inference)
-* Axios (API calls)
-* CSS/Bootstrap (Styling)
+* Streamlit (Unified UI + inference delivery)
+* PyTorch + timm (ConvMixer model)
+* Pillow / torchvision (Preprocessing)
+* Optional: Google Gemini (`google-generativeai`)
+* (Legacy) Flask + React stack retained but not required
 
 ---
 
