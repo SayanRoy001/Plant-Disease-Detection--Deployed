@@ -58,11 +58,11 @@ Thumbs.db
 .vscode/
 
 # ================= Models / Large Files =================
-# Allow committing the primary model weights needed for Streamlit deployment.
+# Generic ignore patterns first; then explicitly unignore the primary weight file needed for Streamlit.
 # If you later add more/larger weights, consider Git LFS.
-!backend/plant_disease_model.pth
 *.pth
 *.pt
+!backend/plant_disease_model.pth
 
 # ================= Misc =================
 *.swp

@@ -3,6 +3,7 @@ import json
 import io
 from functools import lru_cache
 import requests
+import re
 
 import streamlit as st
 from PIL import Image
@@ -36,22 +37,30 @@ def load_model():
         if dl_url:
             st.warning(f"Model file not found – attempting download from MODEL_URL: {dl_url}")
             try:
-                resp = requests.get(dl_url, stream=True, timeout=300)
-                resp.raise_for_status()
-                total = int(resp.headers.get('Content-Length', 0))
                 os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-                bytes_so_far = 0
-                CHUNK = 8192
-                progress = st.progress(0.0)
-                with open(MODEL_PATH, 'wb') as f:
-                    for chunk in resp.iter_content(CHUNK):
-                        if chunk:
-                            f.write(chunk)
-                            bytes_so_far += len(chunk)
-                            if total:
-                                progress.progress(min(1.0, bytes_so_far / total))
-                if total and bytes_so_far < total:
-                    raise RuntimeError("Download incomplete.")
+                # Detect Google Drive sharing link patterns
+                gdrive_match = re.search(r"drive\.google\.com/file/d/([^/]+)/", dl_url)
+                if gdrive_match:
+                    file_id = gdrive_match.group(1)
+                    st.info("Detected Google Drive link – using gdown to fetch the file.")
+                    import gdown  # lazy import
+                    gdown.download(f"https://drive.google.com/uc?id={file_id}", MODEL_PATH, quiet=False)
+                else:
+                    resp = requests.get(dl_url, stream=True, timeout=300)
+                    resp.raise_for_status()
+                    total = int(resp.headers.get('Content-Length', 0))
+                    bytes_so_far = 0
+                    CHUNK = 8192
+                    progress = st.progress(0.0)
+                    with open(MODEL_PATH, 'wb') as f:
+                        for chunk in resp.iter_content(CHUNK):
+                            if chunk:
+                                f.write(chunk)
+                                bytes_so_far += len(chunk)
+                                if total:
+                                    progress.progress(min(1.0, bytes_so_far / total))
+                    if total and bytes_so_far < total:
+                        raise RuntimeError("Download incomplete.")
                 st.success("Model downloaded successfully.")
             except Exception as e:
                 st.error(f"Automatic download failed: {e}")
@@ -135,7 +144,16 @@ if uploaded:
     st.image(pil_img, caption="Uploaded Image", use_container_width=True)
 
     with st.spinner("Loading model & running inference..."):
-        model = load_model()
+        try:
+            model = load_model()
+        except FileNotFoundError as e:
+            st.error("Model weights are missing on the server.")
+            st.info(
+                "Fix steps: 1) Commit 'backend/plant_disease_model.pth' (ensure <100MB) OR 2) Add a direct download URL as secret 'MODEL_URL' in app settings. "
+                "Then rerun the app."
+            )
+            st.caption(str(e))
+            st.stop()
         class_labels = load_class_indices()
         tensor = preprocess_image(pil_img)
         with torch.no_grad():
