@@ -24,6 +24,16 @@ except Exception:
 MODEL_PATH = os.path.join('backend', 'plant_disease_model.pth')
 CLASS_INDICES_PATH = os.path.join('backend', 'class_indices.json')
 
+
+def resolve_model_url():
+    """Return the model URL from env or secrets (or None)."""
+    env_url = os.getenv('MODEL_URL')
+    if env_url:
+        return env_url.strip()
+    if 'MODEL_URL' in st.secrets:
+        return str(st.secrets['MODEL_URL']).strip()
+    return None
+
 st.set_page_config(page_title="Plant Disease Detector", page_icon="🌿", layout="centered")
 st.title("🌿 Plant Disease Detection")
 st.write("Upload a clear leaf image to classify one of the supported disease categories and optionally generate structured treatment information.")
@@ -33,7 +43,7 @@ st.write("Upload a clear leaf image to classify one of the supported disease cat
 def load_model():
     # Attempt to ensure model file exists; optionally download from MODEL_URL if provided
     if not os.path.exists(MODEL_PATH):
-        dl_url = os.getenv('MODEL_URL') or (st.secrets.get('MODEL_URL') if 'MODEL_URL' in st.secrets else None)
+        dl_url = resolve_model_url()
         if dl_url:
             st.warning(f"Model file not found – attempting download from MODEL_URL: {dl_url}")
             try:
@@ -135,6 +145,13 @@ with st.sidebar:
     st.markdown("**Mode:** Pure Streamlit (no Flask server)")
     if not GENAI_API_KEY:
         st.info("Add GENAI_API_KEY in Streamlit secrets to enable AI enrichment.")
+    debug = st.checkbox("Show debug info")
+    if debug:
+        st.write("**Resolved MODEL_URL:**", resolve_model_url())
+        st.write("**Model file exists?**", os.path.exists(MODEL_PATH))
+        if not os.path.exists(MODEL_PATH):
+            st.caption("If MODEL_URL is None: Go to Streamlit Cloud → Settings → Secrets and add a line: MODEL_URL=your_link")
+            st.caption("Google Drive link format accepted: https://drive.google.com/file/d/<FILE_ID>/view?usp=...  (automatic conversion)")
 
 uploaded = st.file_uploader("Upload leaf image", type=["jpg", "jpeg", "png"])
 
