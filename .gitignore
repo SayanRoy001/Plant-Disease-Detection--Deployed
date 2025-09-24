@@ -58,7 +58,9 @@ Thumbs.db
 .vscode/
 
 # ================= Models / Large Files =================
-# (If you want to version model weights, remove these and consider Git LFS.)
+# Allow committing the primary model weights needed for Streamlit deployment.
+# If you later add more/larger weights, consider Git LFS.
+!backend/plant_disease_model.pth
 *.pth
 *.pt
 

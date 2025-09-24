@@ -2,6 +2,7 @@ import os
 import json
 import io
 from functools import lru_cache
+import requests
 
 import streamlit as st
 from PIL import Image
@@ -24,11 +25,40 @@ CLASS_INDICES_PATH = os.path.join('backend', 'class_indices.json')
 
 st.set_page_config(page_title="Plant Disease Detector", page_icon="🌿", layout="centered")
 st.title("🌿 Plant Disease Detection")
-st.write("Upload a leaf image to classify the disease and optionally generate treatment info.")
+st.write("Upload a clear leaf image to classify one of the supported disease categories and optionally generate structured treatment information.")
 
 
 @st.cache_resource(show_spinner=True)
 def load_model():
+    # Attempt to ensure model file exists; optionally download from MODEL_URL if provided
+    if not os.path.exists(MODEL_PATH):
+        dl_url = os.getenv('MODEL_URL') or (st.secrets.get('MODEL_URL') if 'MODEL_URL' in st.secrets else None)
+        if dl_url:
+            st.warning(f"Model file not found – attempting download from MODEL_URL: {dl_url}")
+            try:
+                resp = requests.get(dl_url, stream=True, timeout=300)
+                resp.raise_for_status()
+                total = int(resp.headers.get('Content-Length', 0))
+                os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+                bytes_so_far = 0
+                CHUNK = 8192
+                progress = st.progress(0.0)
+                with open(MODEL_PATH, 'wb') as f:
+                    for chunk in resp.iter_content(CHUNK):
+                        if chunk:
+                            f.write(chunk)
+                            bytes_so_far += len(chunk)
+                            if total:
+                                progress.progress(min(1.0, bytes_so_far / total))
+                if total and bytes_so_far < total:
+                    raise RuntimeError("Download incomplete.")
+                st.success("Model downloaded successfully.")
+            except Exception as e:
+                st.error(f"Automatic download failed: {e}")
+                raise FileNotFoundError(f"Model missing and download failed. Provide 'backend/plant_disease_model.pth' or set MODEL_URL.")
+        else:
+            raise FileNotFoundError(
+                "Model file 'backend/plant_disease_model.pth' not found. Commit it to the repo or set a MODEL_URL secret/env variable pointing to the weights.")
     model = timm.create_model('convmixer_1024_20_ks9_p14.in1k', pretrained=True, num_classes=38)
     state_dict = torch.load(MODEL_PATH, map_location=torch.device('cpu'))
     model.load_state_dict(state_dict)
@@ -92,7 +122,8 @@ with st.sidebar:
     st.header("⚙️ Options")
     show_ai = st.checkbox("Generate AI disease info", value=bool(GENAI_API_KEY))
     st.markdown("**Model file:** `plant_disease_model.pth`")
-    st.markdown("**Backend removed:** This is a pure Streamlit deployment.")
+    st.markdown("**Architecture:** convmixer_1024_20_ks9_p14.in1k (timm)")
+    st.markdown("**Mode:** Pure Streamlit (no Flask server)")
     if not GENAI_API_KEY:
         st.info("Add GENAI_API_KEY in Streamlit secrets to enable AI enrichment.")
 
@@ -101,18 +132,31 @@ uploaded = st.file_uploader("Upload leaf image", type=["jpg", "jpeg", "png"])
 if uploaded:
     image_bytes = uploaded.read()
     pil_img = Image.open(io.BytesIO(image_bytes))
-    st.image(pil_img, caption="Uploaded Image", use_column_width=True)
+    st.image(pil_img, caption="Uploaded Image", use_container_width=True)
 
-    with st.spinner("Loading model & predicting..."):
+    with st.spinner("Loading model & running inference..."):
         model = load_model()
         class_labels = load_class_indices()
         tensor = preprocess_image(pil_img)
         with torch.no_grad():
             outputs = model(tensor)
-        pred_idx = outputs.argmax(dim=1).item()
+        probs = torch.softmax(outputs, dim=1)
+        pred_idx = int(probs.argmax(dim=1).item())
         pred_label = class_labels.get(pred_idx, f"Class {pred_idx}")
 
     st.success(f"Prediction: **{pred_label}**")
+
+    # Show top-3 probabilities for transparency
+    try:
+        inv_map = {int(k): v for k, v in class_labels.items()}
+        topk = torch.topk(probs, k=min(3, probs.shape[1]), dim=1)
+        rows = []
+        for rank, (idx, p) in enumerate(zip(topk.indices[0], topk.values[0]), start=1):
+            rows.append({"Rank": rank, "Class": inv_map.get(int(idx), str(int(idx))), "Probability": f"{float(p)*100:.2f}%"})
+        st.subheader("Top Predictions")
+        st.table(rows)
+    except Exception as e:
+        st.caption(f"Could not compute top-k table: {e}")
 
     if show_ai:
         with st.spinner("Generating disease info (Gemini)..."):
@@ -123,7 +167,27 @@ if uploaded:
             st.markdown(f"### {heading}")
             st.write(body)
 else:
-    st.info("Upload a leaf image to begin.")
+    st.info("Upload a leaf image (jpg / png) to begin. Clear, centered leaves perform best.")
+
+with st.expander("ℹ️ How it works"):
+    st.markdown(
+        """
+        **Pipeline**
+        1. Image is resized to 256×256 and normalized (mean=0.5, std=0.5).
+        2. ConvMixer (timm) model performs inference on CPU.
+        3. Highest softmax probability is shown along with top-3 classes.
+        4. (Optional) Gemini generates structured disease information (cached in memory).
+
+        **Tips**
+        - Use single leaf images on plain backgrounds for best accuracy.
+        - Lighting and focus matters.
+        - AI text is advisory; always validate agronomic recommendations.
+
+        **Performance**
+        - First prediction loads the model (cached afterwards).
+        - Repeated disease info queries are cached (LRU cache size 256).
+        """
+    )
 
 st.markdown("---")
 st.caption("© 2025 Plant Disease Detector – Streamlit Edition")
